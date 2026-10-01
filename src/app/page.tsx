@@ -1,69 +1,39 @@
-import Image from "next/image";
+import { connection } from "next/server";
+import { CandidateTable, type ListCandidate } from "@/components/candidate-table";
+import { UploadPanel } from "@/components/upload-panel";
+import { toPublicError } from "@/lib/errors";
+import { db, dbError, LIST_COLUMNS, normalizeCandidate } from "@/lib/server/db";
+import { env } from "@/lib/server/env";
 
-export default function Home() {
+async function loadCandidates(): Promise<{ candidates: ListCandidate[]; error: string | null }> {
+  try {
+    const { data, error } = await db().from("candidates").select(LIST_COLUMNS);
+    if (error) throw dbError("loading candidates", error);
+    return { candidates: (data ?? []).map((r) => normalizeCandidate(r) as unknown as ListCandidate), error: null };
+  } catch (err) {
+    return { candidates: [], error: toPublicError(err).message };
+  }
+}
+
+export default async function Home() {
+  await connection(); // always render with fresh data
+  const { candidates, error } = await loadCandidates();
+  const threshold = env.shortlistThreshold();
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="flex flex-col gap-6">
+      {error && (
+        <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+          {error}
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      )}
+      <UploadPanel />
+      <CandidateTable candidates={candidates} threshold={threshold} />
+      <p className="text-xs text-slate-500">
+        Scores are 0-100: each rubric criterion is scored 0-10 and weighted by rubric.txt. Candidates are ranked within
+        the role they applied for. The top 5 per role get a 3-sentence interview brief. Emails are drafts until you
+        press Confirm &amp; Send.
+      </p>
     </div>
   );
 }
