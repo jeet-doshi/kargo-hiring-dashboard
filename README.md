@@ -94,8 +94,9 @@ Next.js route handlers on Vercel (server-only; all secrets live here)
 4. **PII guard.** `assertNoPii` runs on the anonymised text before any Gemini call. If a known name, email or phone is still present, the upload is stopped and nothing is sent.
 5. **Emails.** Gemini writes drafts with a `{{CANDIDATE_NAME}}` placeholder. The real name and email are read from the private record and filled in on the server, for the preview and at send time.
 6. **Secrets.** Every Gemini, Resend and Supabase call runs on the server. There are no `NEXT_PUBLIC_` secrets. The database uses Row Level Security with no policies, so the public anon key can read nothing; the server uses the service-role key. Error responses carry founder-friendly messages only, never stack traces or provider error bodies.
-7. **Repo hygiene.** `.env*` files and the candidate CV folders (`applications/`, `hires/`, `roles/`) are git-ignored.
-8. **Transparency.** The candidate page has a "What the AI saw" panel showing the exact anonymised text sent to Gemini.
+7. **Access control.** `src/proxy.ts` puts every page and API route behind HTTP Basic authentication (`DASHBOARD_USER` / `DASHBOARD_PASSWORD`), using a constant-time comparison. It fails closed in production. This matters because Vercel's standard Deployment Protection covers preview URLs but **not** the production domain.
+8. **Repo hygiene.** `.env*` files and the candidate CV folders (`applications/`, `hires/`, `roles/`) are git-ignored.
+9. **Transparency.** The candidate page has a "What the AI saw" panel showing the exact anonymised text sent to Gemini.
 
 `npm run test:pii` runs parsing and anonymisation over every CV in `./applications` and fails if any detected name, email or phone survives.
 
@@ -131,6 +132,8 @@ Copy `.env.example` to `.env.local` (git-ignored):
 | `RESEND_API_KEY` | yes | Resend API key |
 | `EMAIL_FROM` | no | e.g. `Kargo Hiring <hiring@yourdomain.com>`. Must be a domain verified in Resend. The default `onboarding@resend.dev` only delivers to your own Resend account address. |
 | `FOUNDER_NAME` | no | Email sign-off |
+| `DASHBOARD_USER` | no | Login username (default `founder`) |
+| `DASHBOARD_PASSWORD` | **yes in production** | Login password for the whole dashboard. The app returns 503 everywhere if it isn't set (fails closed). |
 | `SHORTLIST_THRESHOLD` | no | 0–100, default 60 |
 
 ---
@@ -175,7 +178,7 @@ Other scripts:
 1. Push the repo to GitHub. Secrets and CVs are git-ignored.
 2. In Vercel, **Add New → Project**, then import the repo. The Next.js preset is detected automatically.
 3. Under **Settings → Environment Variables**, add the variables above for Production (and Preview if you want).
-4. Deploy. The upload route sets `maxDuration = 300` s, which fits within Vercel's default Fluid Compute limits. Each CV takes about 30–60 s, and the dashboard uploads several CVs one request at a time.
+4. Set `DASHBOARD_PASSWORD` (and optionally `DASHBOARD_USER`); without it production serves nothing. Deploy. The upload route sets `maxDuration = 300` s, which fits within Vercel's default Fluid Compute limits. Each CV takes about 30–60 s, and the dashboard uploads several CVs one request at a time.
 5. Optional: verify a sending domain in Resend and set `EMAIL_FROM` to use it.
 
 ---
